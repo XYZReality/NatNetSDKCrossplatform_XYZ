@@ -25,24 +25,24 @@ target_link_libraries(packetClient
   Boost::thread
 )
 
-## SampleClient
-include_directories(include)
-link_directories(lib/ubuntu)
-add_executable(sampleClient
-  samples/SampleClient/SampleClient.cpp
-)
-target_link_libraries(sampleClient
-  NatNet
-  Threads::Threads
-)
+# ## SampleClient
+# include_directories(include)
+# link_directories(lib/ubuntu)
+# add_executable(sampleClient
+#   samples/SampleClient/SampleClient.cpp
+# )
+# target_link_libraries(sampleClient
+#   NatNet
+#   Threads::Threads
+# )
 
-## MinimalClient
-include_directories(include)
-link_directories(lib/ubuntu)
-add_executable(minimalClient
-  samples/MinimalClient/MinimalClient.cpp
-)
-target_link_libraries(minimalClient
-  NatNet
-  Threads::Threads
-)
+# ## MinimalClient
+# include_directories(include)
+# link_directories(lib/ubuntu)
+# add_executable(minimalClient
+#   samples/MinimalClient/MinimalClient.cpp
+# )
+# target_link_libraries(minimalClient
+#   NatNet
+#   Threads::Threads
+# )

@@ -1407,6 +1407,8 @@ void buildConnectPacket(std::vector<char> &buffer)
 {
     sPacket packet;
     packet.iMessage = NAT_CONNECT;
+    // packet.iMessage = NAT_REQUEST_MODELDEF;
+    // packet.iMessage = NAT_REQUEST ;
     packet.nDataBytes = 0;
     buffer.resize(4);
     memcpy(buffer.data(), &packet, 4);
@@ -1419,12 +1421,12 @@ void UnpackCommand(char *pData)
     // handle command
     switch (replyPacket->iMessage)
     {
-    // case NAT_MODELDEF:
-    //     Unpack(pData);
-    //     break;
-    // case NAT_FRAMEOFDATA:
-    //     Unpack(pData);
-    //     break;
+    case NAT_MODELDEF:
+        Unpack(pData);
+        break;
+    case NAT_FRAMEOFDATA:
+        Unpack(pData);
+        break;
     case NAT_SERVERINFO:
         for (int i = 0; i < 4; i++)
         {
@@ -2173,8 +2175,9 @@ char* UnpackAssetDescription(char* ptr, char* targetPtr, int major, int minor)
 char* UnpackFrameData( char* inptr, int nBytes, int major, int minor )
 {
     char* ptr = inptr;
+    
     ptr = UnpackFramePrefixData( ptr, major, minor );
-
+    
     ptr = UnpackMarkersetData( ptr, major, minor );
 
     ptr = UnpackLegacyOtherMarkers( ptr, major, minor );
@@ -2184,10 +2187,10 @@ char* UnpackFrameData( char* inptr, int nBytes, int major, int minor )
     ptr = UnpackSkeletonData( ptr, major, minor );
 
     // Assets ( Motive 3.1 / NatNet 4.1 and greater)
-    if (((major == 4) && (minor > 0)) || (major > 4))
-    {
-        ptr = UnpackAssetData(ptr, major, minor);
-    }
+    // if (((major == 4) && (minor > 0)) || (major > 4))
+    // {
+    //     ptr = UnpackAssetData(ptr, major, minor);
+    // }
 
     ptr = UnpackLabeledMarkerData( ptr, major, minor );
 
@@ -2227,8 +2230,6 @@ char* UnpackLegacyOtherMarkers(char* ptr, int major, int minor)
     // First 4 Bytes is the number of Other markers
     int nOtherMarkers = 0; memcpy(&nOtherMarkers, ptr, 4); ptr += 4;
     printf("Other Marker Count : %3.1d\n", nOtherMarkers);
-    int nBytes;
-    ptr = UnpackDataSize(ptr, major, minor,nBytes);
 
     for (int j = 0; j < nOtherMarkers; j++)
     {
@@ -2254,9 +2255,6 @@ char* UnpackMarkersetData( char* ptr, int major, int minor )
     int nMarkerSets = 0; memcpy( &nMarkerSets, ptr, 4 ); ptr += 4;
     printf( "Marker Set Count : %3.1d\n", nMarkerSets );
 
-    int nBytes=0;
-    ptr = UnpackDataSize(ptr, major, minor,nBytes);
-
     // Loop through number of marker sets and get name and data
     for( int i = 0; i < nMarkerSets; i++ )
     {
@@ -2265,7 +2263,7 @@ char* UnpackMarkersetData( char* ptr, int major, int minor )
         strcpy_s( szName, ptr );
         int nDataBytes = (int) strlen( szName ) + 1;
         ptr += nDataBytes;
-        MakeAlnum( szName, MAX_NAMELENGTH );
+        // MakeAlnum( szName, MAX_NAMELENGTH );
         printf( "Model Name       : %s\n", szName );
 
         // marker data
@@ -2298,9 +2296,6 @@ char* UnpackRigidBodyData( char* ptr, int major, int minor )
     int nRigidBodies = 0;
     memcpy( &nRigidBodies, ptr, 4 ); ptr += 4;
     printf( "Rigid Body Count : %3.1d\n", nRigidBodies );
-
-    int nBytes=0;
-    ptr = UnpackDataSize(ptr, major, minor,nBytes);
 
     for( int j = 0; j < nRigidBodies; j++ )
     {
@@ -2391,7 +2386,6 @@ char* UnpackRigidBodyData( char* ptr, int major, int minor )
 
     } // Go to next rigid body
 
-
     return ptr;
 }
 
@@ -2411,9 +2405,6 @@ char* UnpackSkeletonData( char* ptr, int major, int minor )
         int nSkeletons = 0;
         memcpy( &nSkeletons, ptr, 4 ); ptr += 4;
         printf( "Skeleton Count : %d\n", nSkeletons );
-
-        int nBytes=0;
-        ptr = UnpackDataSize(ptr, major, minor,nBytes);
 
         // Loop through skeletons
         for( int j = 0; j < nSkeletons; j++ )
@@ -2613,9 +2604,6 @@ char* UnpackLabeledMarkerData( char* ptr, int major, int minor )
         memcpy( &nLabeledMarkers, ptr, 4 ); ptr += 4;
         printf( "Labeled Marker Count : %d\n", nLabeledMarkers );
 
-        int nBytes=0;
-        ptr = UnpackDataSize(ptr, major, minor,nBytes);
-
         // Loop through labeled markers
         for( int j = 0; j < nLabeledMarkers; j++ )
         {
@@ -2657,7 +2645,6 @@ char* UnpackLabeledMarkerData( char* ptr, int major, int minor )
                     bool bUnlabeled = ( params & 0x10 ) != 0;    // marker is 'unlabeled', but has a point cloud ID
                     bool bActiveMarker = ( params & 0x20 ) != 0; // marker is an actively labeled LED marker
                 }
-
             }
 
             // NatNet version 3.0 and later
@@ -2720,9 +2707,6 @@ char* UnpackForcePlateData( char* ptr, int major, int minor )
         memcpy( &nForcePlates, ptr, 4 ); ptr += 4;
         printf( "Force Plate Count: %d\n", nForcePlates );
 
-        int nBytes=0;
-        ptr = UnpackDataSize(ptr, major, minor,nBytes);
-
         for( int iForcePlate = 0; iForcePlate < nForcePlates; iForcePlate++ )
         {
             // ID
@@ -2777,9 +2761,6 @@ char* UnpackDeviceData( char* ptr, int major, int minor )
         memcpy( &nDevices, ptr, 4 ); ptr += 4;
         printf( "Device Count: %d\n", nDevices );
 
-        int nBytes=0;
-        ptr = UnpackDataSize(ptr, major, minor,nBytes);
-
         for( int iDevice = 0; iDevice < nDevices; iDevice++ )
         {
             // ID
@@ -2827,11 +2808,11 @@ char* UnpackFrameSuffixData( char* ptr, int major, int minor )
 {
 
     // software latency (removed in version 3.0)
-    if( major < 3 )
-    {
-        float softwareLatency = 0.0f; memcpy( &softwareLatency, ptr, 4 );	ptr += 4;
-        printf( "software latency : %3.3f\n", softwareLatency );
-    }
+    // if( major < 3 )
+    // {
+    //     float softwareLatency = 0.0f; memcpy( &softwareLatency, ptr, 4 );	ptr += 4;
+    //     printf( "software latency : %3.3f\n", softwareLatency );
+    // }
 
     // timecode
     unsigned int timecode = 0; 	memcpy( &timecode, ptr, 4 );	ptr += 4;
@@ -2871,17 +2852,17 @@ char* UnpackFrameSuffixData( char* ptr, int major, int minor )
         printf( "Transmit timestamp             : %" PRIu64"\n", transmitTimestamp );
     }
 
-    // precision timestamps (optionally present) (NatNet 4.1 and later)
-    if (((major == 4) && (minor > 0)) || (major > 4) || (major == 0))
-    {
-        uint32_t PrecisionTimestampSecs = 0;
-        memcpy(&PrecisionTimestampSecs, ptr, 4); ptr += 4;
-        printf("Precision timestamp seconds : %d\n", PrecisionTimestampSecs);
+    // // precision timestamps (optionally present) (NatNet 4.1 and later)
+    // if (((major == 4) && (minor > 0)) || (major > 4) || (major == 0))
+    // {
+    //     uint32_t PrecisionTimestampSecs = 0;
+    //     memcpy(&PrecisionTimestampSecs, ptr, 4); ptr += 4;
+    //     printf("Precision timestamp seconds : %d\n", PrecisionTimestampSecs);
 
-        uint32_t PrecisionTimestampFractionalSecs = 0;
-        memcpy(&PrecisionTimestampFractionalSecs, ptr, 4); ptr += 4;
-        printf("Precision timestamp fractional seconds : %d\n", PrecisionTimestampFractionalSecs);
-    }
+    //     uint32_t PrecisionTimestampFractionalSecs = 0;
+    //     memcpy(&PrecisionTimestampFractionalSecs, ptr, 4); ptr += 4;
+    //     printf("Precision timestamp fractional seconds : %d\n", PrecisionTimestampFractionalSecs);
+    // }
 
     // frame params
     short params = 0;  memcpy( &params, ptr, 2 ); ptr += 2;
@@ -2988,11 +2969,11 @@ char* Unpack( char* pData )
         break;
     case NAT_FRAMEOFDATA:
     {
-        /*
+        
             // FRAME OF MOCAP DATA packet
             printf("Message ID  : %d NAT_FRAMEOFDATA\n", messageID);
             printf("Packet Size : %d\n", nBytes);
-        */
+        
 
         // Extract frame data flags (last 2 bytes in packet)
         uint16_t params;

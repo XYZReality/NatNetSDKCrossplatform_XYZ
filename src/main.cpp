@@ -55,12 +55,12 @@ private:
   {
     socket_.async_receive_from(
         boost::asio::buffer(data_.data(), data_.size()), sender_endpoint_,
-        [this](boost::system::error_code ec, std::size_t /*length*/)
+        [this](boost::system::error_code ec, std::size_t length)
         {
           if (!ec)
           {
-            // std::cout.write(data_.data(), length);
-            // std::cout << std::endl;
+            std::cout.write(data_.data(), length);
+            std::cout << std::endl;
             Unpack(data_.data());
 
             do_receive();
@@ -77,6 +77,7 @@ private:
 
 int main(int argc, char* argv[])
 {
+  std::cout << "This is the beginning of main.cpp\n";
   try
   {
     // Connect to command port to query version
@@ -102,9 +103,19 @@ int main(int argc, char* argv[])
     udp::endpoint sender_endpoint;
     /*size_t reply_length =*/ socket_cmd.receive_from(
         boost::asio::buffer(reply, MAX_PACKETSIZE), sender_endpoint);
+    
+    std::cout << "Got reply, unpacking...\n";
 
     UnpackCommand(reply.data());
 
+    std::cout << "Unpacked\n";
+
+    for(int i = 0; i < 1; i++)
+    {
+      socket_cmd.receive_from(boost::asio::buffer(reply, MAX_PACKETSIZE), sender_endpoint);
+      UnpackCommand(reply.data());
+    }
+   
     // Listen on multicast address
     boost::asio::io_service io_service;
     receiver r(io_service,
