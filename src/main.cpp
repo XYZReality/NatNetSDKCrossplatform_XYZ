@@ -19,51 +19,62 @@
 constexpr const char* MULTICAST_ADDRESS = "239.255.42.99";
 constexpr int PORT_COMMAND = 1510;
 constexpr int PORT_DATA = 1511;
-constexpr int MAX_PACKETSIZE = 1000;  // max size of packet (actual packet size is dynamic)
+constexpr int MAX_PACKETSIZE = 2000;  // max size of packet (actual packet size is dynamic)
+constexpr int PACKET_FREQ = 240; // 240 msgs per second
+constexpr int MAX_RUNTIME = 10; // 10 seconds
+
+#define NAT_CONNECT                 0
+#define NAT_RESPONSE                3
+#define NAT_DISCONNECT              9
+#define NAT_KEEPALIVE               10
 
 void Unpack(char* pData);
-void buildConnectPacket(std::vector<char>& buffer);
+void buildPacket(std::vector<char>& buffer, int command);
 void UnpackCommand(char* pData);
 
 using boost::asio::ip::udp;
+using boost::asio::ip::address;
 
 class receiver
 {
 public:
   receiver(boost::asio::io_service& io_service,
-          const boost::asio::ip::address& listen_address,
-          const boost::asio::ip::address& multicast_address)
+          const address& listen_address,
+          const address& multicast_address)
     : socket_(io_service)
     , sender_endpoint_()
     , data_(MAX_PACKETSIZE)
     , initialized_(false)
+    , io_service_(io_service)
     , work_(io_service)
     , msgCount_(0)
   {
-    std::cout << "Attempting to bind to: " << listen_address << std::endl;
-    // Create the socket so that multiple may be bound to the same address.
-    boost::asio::ip::udp::endpoint listen_endpoint(listen_address, PORT_DATA);
+    // Bind socket to the listen address and join multicast group
+    udp::endpoint listen_endpoint(listen_address, PORT_DATA);
     socket_.open(listen_endpoint.protocol());
-    socket_.set_option(boost::asio::ip::udp::socket::reuse_address(true));
+    socket_.set_option(udp::socket::reuse_address(true));
     socket_.bind(listen_endpoint);
-    // Join the multicast group.
     socket_.set_option(boost::asio::ip::multicast::join_group(multicast_address));
+  }
+
+  ~receiver()
+  {
+    close_socket();
   }
 
   void initialize(const std::string& host)
   {
     try
     {
+
       boost::asio::io_service io_service_cmd;
 
       // Resolve command endpoint
       udp::resolver resolver_cmd(io_service_cmd);
-      udp::endpoint endpoint_cmd = *resolver_cmd.resolve({udp::v4(), host, std::to_string(PORT_COMMAND)});
+      command_endpoint_ = *resolver_cmd.resolve({udp::v4(), host, std::to_string(PORT_COMMAND)});
 
       // Build and send connect command
-      std::vector<char> connectCmd;
-      buildConnectPacket(connectCmd);
-      socket_.send_to(boost::asio::buffer(connectCmd.data(), connectCmd.size()), endpoint_cmd);
+      send_packet(NAT_CONNECT);
 
       // Receive reply
       std::vector<char> reply(MAX_PACKETSIZE);
@@ -72,6 +83,9 @@ public:
 
       std::cout << "Got reply, unpacking...\n";
       UnpackCommand(reply.data());
+
+      // Build and send connect command
+      send_packet(NAT_DISCONNECT);   
 
       // Set initialization flag
       initialized_ = true;
@@ -94,7 +108,35 @@ public:
     do_receive();
   }
 
+  void close_socket()
+  {
+    if (socket_.is_open())
+    {
+      boost::system::error_code ec;
+      socket_.close(ec);
+      if (ec)
+      {
+        std::cerr << "Error closing socket: " << ec.message() << std::endl;
+      }
+    }
+  }
 private:
+  void send_packet(int command)
+  {
+    std::vector<char> connectCmd;
+    buildPacket(connectCmd, command);
+    socket_.send_to(boost::asio::buffer(connectCmd.data(), connectCmd.size()), command_endpoint_);
+  }
+
+  void unpackHeader(char* ptr, int& messageID, int& nBytes, int& nBytesTotal)
+  {
+    // First 2 Bytes is message ID
+    memcpy( &messageID, ptr, 2 );
+    // Second 2 Bytes is the size of the packet
+    memcpy( &nBytes, ptr + 2, 2 );
+    nBytesTotal = nBytes + 4;
+  }
+
   void do_receive()
   {
     socket_.async_receive_from(
@@ -103,7 +145,22 @@ private:
         {
           if (!ec)
           {
-            // Print the time of arrival with millisecond and microsecond precision
+            // Process received data
+            int messageID = 0;
+            int nBytes = 0;
+            int nBytesTotal = 0;
+            unpackHeader(data_.data(), messageID, nBytes, nBytesTotal);
+
+            // Check the message ID
+            if (messageID == NAT_RESPONSE)
+            {
+              std::cout << "Received NAT_RESPONSE. Stopping IO service.\n";
+              // Stop the io_service to cease further operations
+              io_service_.stop();
+              return;
+            }
+
+            // Print arrival time and other details
             auto arrival_time = std::chrono::high_resolution_clock::now();
             auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
                 arrival_time.time_since_epoch()
@@ -120,9 +177,17 @@ private:
                       << "." << std::setfill('0') << std::setw(3) << millis.count() % 1000
                       << std::setfill('0') << std::setw(3) << micros.count() % 1000 << " ms\n";
 
-            // Process received data
-            //Unpack(data_.data());
-            
+            // Process the data (Unpack and any other necessary actions)
+            Unpack(data_.data());
+
+            // Check if the packet limit has been reached
+            if (msgCount_ >= PACKET_FREQ * MAX_RUNTIME)
+            {
+              std::cout << "Packet limit reached, reconnecting...\n";
+              msgCount_ = 0;  // Reset packet count
+              send_packet(NAT_KEEPALIVE);  // Let the server know to stay alive
+            }
+
             // Continue to receive asynchronously
             do_receive();
           }
@@ -134,11 +199,14 @@ private:
         });
   }
 
-  boost::asio::ip::udp::socket socket_;
-  boost::asio::ip::udp::endpoint sender_endpoint_;
+
+  udp::socket socket_;
+  udp::endpoint sender_endpoint_;
   std::vector<char> data_;
   bool initialized_;
+  boost::asio::io_service& io_service_;
   boost::asio::io_service::work work_;  // Keep io_service running
+  udp::endpoint command_endpoint_;
   int msgCount_;
 };
 
@@ -154,8 +222,8 @@ int main(int argc, char* argv[])
 
     boost::asio::io_service io_service;
     receiver r(io_service,
-               boost::asio::ip::address::from_string("0.0.0.0"),  // Listen on all interfaces
-               boost::asio::ip::address::from_string(MULTICAST_ADDRESS));
+               address::from_string("0.0.0.0"),  // Listen on all interfaces
+               address::from_string(MULTICAST_ADDRESS));
 
     // Initialize receiver with handshake
     r.initialize(argv[1]);

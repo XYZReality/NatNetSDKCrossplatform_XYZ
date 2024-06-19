@@ -42,6 +42,8 @@ limitations under the License. */
 
 using std::min;
 
+//#define printf(...) ((void)0)
+
 // non-standard/optional extension of C; define an unsafe version here
 // to not change example code below
 int strcpy_s(char *dest, size_t destsz, const char *src)
@@ -297,12 +299,10 @@ void MakeAlnum( char* szName, int len )
     }
 }
 
-void buildConnectPacket(std::vector<char> &buffer)
+void buildPacket(std::vector<char> &buffer, int command)
 {
     sPacket packet;
-    packet.iMessage = NAT_CONNECT;
-    // packet.iMessage = NAT_REQUEST_MODELDEF;
-    // packet.iMessage = NAT_REQUEST ;
+    packet.iMessage = command;
     packet.nDataBytes = 0;
     buffer.resize(4);
     memcpy(buffer.data(), &packet, 4);
@@ -1831,6 +1831,7 @@ char* Unpack( char* pData )
         if( !gBitstreamChangePending )
         {
             ptr = UnpackFrameData( ptr, nBytes, major, minor );
+
             packetProcessed = true;
         }
     }
